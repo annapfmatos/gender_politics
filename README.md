@@ -1,2 +1,2 @@
 # gender_politics
-DPI 410 and final assignment (2024) 
+DPI 410 final assignment (2024) 
