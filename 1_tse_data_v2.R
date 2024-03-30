@@ -64,7 +64,8 @@ f_csv_vote_cand <- function(x) {
     
     # Select only candidates running as mayor
     filter(DS_CARGO == "Prefeito") |>
-    select(
+    as_tibble() |>
+    dplyr::select(
       -c(
         "DT_GERACAO", "HH_GERACAO", "CD_TIPO_ELEICAO", "NM_TIPO_ELEICAO",
         "DS_ELEICAO", "DT_ELEICAO", "TP_ABRANGENCIA", "SG_UF", "NM_UE",
@@ -257,6 +258,7 @@ tse2 <- inner_join(tse2, df_vote_detail, by = "id_area")
 check_vote_cand <- df_vote_cand[duplicated(df_vote_cand[c("id_total")]),] # Passed!
 check_vote_detail <- df_vote_detail[duplicated(df_vote_detail[c("id_area")]), ] # Passed!
 check_candidate <- df_candidate[duplicated(df_candidate[c("id_cand")]), ] # 441 duplicates. See observation below.
+
 test1 <- anti_join(df_vote_cand, df_candidate, by = "id_cand") # It is possible that those who are not "2nd Turn" and appear in this list are those who took part in elections that were cancelled.
 test2 <- anti_join(df_vote_cand, df_vote_detail, by = "id_area") # Passed!
 test3 <- group_by(df_candidate, id_cand) |> # 879 occurencies of duplicates. Possible that those were the vice-candidates that ran in case of renunciation or nullment of candidacy.
@@ -367,12 +369,69 @@ tse <- tse |>
 
 
 # More smell tests
-tse |> group_by(test1) |>
-  summarise(n())
+#tse |> group_by(test1) |>
+#  summarise(n())
 
-test1 <- filter(tse, p_cand_votes_m < 0.5 & round == 1 & cand_status3 == "ELEITO")
-test1 <- filter(tse, p_cand_votes_m >= 0.5 & round == 1 & cand_status3 == "ELEITO")
-test1 <- filter(tse, cand_status3 != cand_status4)
+#test1 <- filter(tse, p_cand_votes_m < 0.5 & round == 1 & cand_status3 == "ELEITO")
+#test1 <- filter(tse, p_cand_votes_m >= 0.5 & round == 1 & cand_status3 == "ELEITO")
+#test1 <- filter(tse, cand_status3 != cand_status4)
+
+tse <- tse |>
+  mutate(
+    elected_female = case_when(
+      female == 1 & cand_status4 == "ELEITO" ~ 1,
+      TRUE ~ 0
+    )) |>
+  group_by(year) |>
+    mutate(
+      lag_elected_female = lag(elected_female, 1) 
+    ) |>
+  ungroup() |>
+  mutate(
+    year = as.factor(year),
+    ballot_num = as.factor(ballot_num)
+  )
+
+tse3 <- as.data.frame(tse) %>% 
+  filter(!is.na(elected_female), last_run == 1) |>
+  #group_by(year, ballot_num, id_tse_loca) |>
+  distinct(across(c(year, ballot_num, id_tse_loca)), .keep_all = T) |>
+  #unique(year, ballot_num, id_tse_loca) |>
+  arrange(year, id_tse_loca)
+
+
+
+
+
+#typeof(tse)
+#tse_reg <- filter(as.data.frame(tse), !is.na(tse))
+
+#reg 1
+reg <- lm(female ~ lag_elected_female, data = tse3, subset = mixed_gender == 1)
+
+#reg 2 with controls
+reg2 <- lm(female ~ lag_elected_female + year, data = tse3, subset = mixed_gender == 1)
+
+#reg 3 with controls
+reg3 <- lm(female ~ lag_elected_female, data = tse3)
+
+#reg 4 with controls
+reg3 <- lm(female ~ lag_elected_female + year, data = tse3)
+
+#reg 5 with controls
+reg3 <- lm(female ~ lag_elected_female + year, data = tse3)
+
+#reg 6 with controls
+reg3 <- lm(female ~ region, data = tse3)
+
+reg3 <- lm(mixed_gender ~ lag_elected_female + year + region + ballot_num, data = tse3)
+
+#Final results
+reg1 <- glm(mixed_gender ~ lag_elected_female, data = tse3, family = binomial)
+reg2 <- glm(mixed_gender ~ lag_elected_female + year + region, data = tse3, family = binomial) #fixed effects
+reg3 <- glm(mixed_gender ~ lag_elected_female + year + region + ballot_num, data = tse3, family = binomial) #Control variables
+reg4 <- lm(mixed_gender ~ lag_elected_female + year + region + ballot_num, data = tse3)
+stargazer(reg1,reg2,reg3,reg4, type = "text")
 
 
 
@@ -385,11 +444,17 @@ df_mun <- st_read(paste0(ibgewd,"/BR_Municipios_2022.shp")) |>
 
 
 # Load the table that converts TSE municipality codes into IBGE codes
-df_ibge <- read.csv(paste0(ibgewd, "/municipios_brasileiros_tse.csv"))
+df_ibge <- read.csv(paste0(ibgewd, "/municipios_brasileiros_tse.csv")) |>
+  mutate(
+    codigo_ibge_str = as.character(codigo_ibge),
+    region = as.factor(substr(codigo_ibge, 1, 1))
+  )
+
+
 
 
 # Merge the IBGE codes into the TSE dataset
-tse3 <- tse |>
+tse3 <- tse3 |>
   mutate(
     id_tse_muni = as.numeric(id_tse_muni),
     codigo_tse = id_tse_muni) |>
