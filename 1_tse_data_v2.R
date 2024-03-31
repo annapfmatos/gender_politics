@@ -431,7 +431,22 @@ reg1 <- glm(mixed_gender ~ lag_elected_female, data = tse3, family = binomial)
 reg2 <- glm(mixed_gender ~ lag_elected_female + year + region, data = tse3, family = binomial) #fixed effects
 reg3 <- glm(mixed_gender ~ lag_elected_female + year + region + ballot_num, data = tse3, family = binomial) #Control variables
 reg4 <- lm(mixed_gender ~ lag_elected_female + year + region + ballot_num, data = tse3)
-stargazer(reg1,reg2,reg3,reg4, type = "text")
+
+
+# Output the regression table to Word
+stargazer(
+  reg1, reg2, reg3, reg4, type = "html", title = "Regression models",
+  omit = c("year", "region", "ballot_num"), out = "tablas.html",
+  add.lines = list(
+    c("Year FE", "No", "Yes", "Yes", "Yes"),
+    c("Region FE", "No", "Yes", "Yes", "Yes"),
+    c("Party FE", "No", "No", "Yes", "Yes")),
+  omit = c("aic", "logLik", "rss", "rsq"))
+
+##### Alexa Descriptive statistics 
+summary_stats <- tse3 %>% 
+  select(mixed_gender,elected_female)
+  
 
 
 
